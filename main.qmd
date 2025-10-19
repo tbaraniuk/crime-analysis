@@ -7,28 +7,122 @@ format:
     typst: default
 ---
 
-
 ## Import Libraries
-```{r}
 
+```{r message=FALSE, warning=FALSE}
+library(readr)
+library(dplyr)
+library(lubridate)
+library(readxl)
+library(rvest)
+library(tidyr)
 ```
-
 
 ## Read & Parse the data
 
-- /data/ParkingViolationCodes_March_2024.xlsx - https://data.cityofnewyork.us/City-Government/Open-Parking-and-Camera-Violations/nc67-uf89/about_data;
-- /data/non-seven-major-felony-offenses-2000-2024.xls - https://www.nyc.gov/site/nypd/stats/crime-statistics/historical.page;
-- /data/non-seven-major-felony-offenses-2000-2024.xls - https://www.nyc.gov/site/nypd/stats/crime-statistics/historical.page;
-- /data/misdemeanor-offenses-2000-2024.xls - https://www.nyc.gov/site/nypd/stats/crime-statistics/historical.page;
-- /data/violation-offenses-2000-2024.xls - https://www.nyc.gov/site/nypd/stats/crime-statistics/historical.page;
-- https://uk.wikipedia.org/wiki/%D0%97%D0%BB%D0%BE%D1%87%D0%B8%D0%BD%D0%BD%D1%96%D1%81%D1%82%D1%8C_%D0%B2_%D0%A3%D0%BA%D1%80%D0%B0%D1%97%D0%BD%D1%96;
-- https://visnyk-juris-uzhnu.com/wp-content/uploads/2025/07/46-3.pdf
-
-
 ```{r}
-```
+# Download complaint data
+complaint_data <- read_csv("data/NYPD_Complaint_Data_Historic_20251019 (1).csv")
 
+# Download seven major felony data (2000-2024)
+df_seven <- read_excel(
+  "data/seven-major-felony-offenses-2000-2024.xls",
+  sheet = "Seven Major Felony Offenses"
+)
+
+# Download non-seven major felony data (2000-2024)
+df_non_seven <- read_excel(
+  "data/non-seven-major-felony-offenses-2000-2024.xls",
+  sheet = "Non-Seven Major Felony Offenses"
+)
+
+# Download misdemeanor felony data (2000-2024)
+df_misdemeanor <- read_excel(
+  "data/misdemeanor-offenses-2000-2024.xls",
+  sheet = "Misdemeanor Offenses"
+)
+
+# Download violation offenses data (2000-2024)
+df_violation <- read_excel(
+  "data/violation-offenses-2000-2024.xls",
+  sheet = "Violation Offenses"
+)
+
+# Get evictions data
+evictions <- read_csv("data/Evictions_20251019.csv") 
+
+# Set up Employment dataset
+employment <- tribble(
+  ~Year, ~Jan,     ~Feb,     ~Mar,     ~Apr,     ~May,     ~Jun,     ~Jul,     ~Aug,     ~Sep,     ~Oct,     ~Nov,     ~Dec,     ~Avg,
+  2015, 3958208, 3964664, 3971508, 3978300, 3983706, 3986941, 3989005, 3990512, 3992331, 3995419, 3999468, 4003350, NA,
+  2016, 4006230, 4007524, 4007237, 4007022, 4008273, 4011263, 4016231, 4023299, 4031774, 4041168, 4051841, 4063744, NA,
+  2017, 4075857, 4088065, 4098525, 4106086, 4111095, 4114173, 4114651, 4112158, 4107776, 4102560, 4096940, 4092620, NA,
+  2018, 4090897, 4091911, 4095144, 4098528, 4099468, 4097639, 4094265, 4091028, 4087876, 4085684, 4085822, 4088102, NA,
+  2019, 4091622, 4095709, 4099323, 4102577, 4105815, 4108430, 4110084, 4111355, 4115220, 4120762, 4125174, 4125178, NA,
+  2020, 4118889, 4105878, 4090065, 3237428, 3085800, 3356065, 3404773, 3443541, 3485521, 3513375, 3539933, 3560502, NA,
+  2021, 3577206, 3593789, 3614580, 3637239, 3660024, 3681834, 3699877, 3717291, 3734594, 3755472, 3775818, 3796045, NA,
+  2022, 3815035, 3833284, 3849545, 3866233, 3880562, 3893618, 3904408, 3912256, 3918728, 3926471, 3936346, 3946206, NA,
+  2023, 3956710, 3967149, 3977601, 3987657, 3995860, 4001786, 4006278, 4009467, 4012253, 4015857, 4021493, 4030305, NA,
+  2024, 4039697, 4048936, 4056337, 4062301, 4067310, 4069992, 4070497, 4070383, 4070225, 4070948, 4073437, 4076067, NA,
+  2025, 4077315, 4085603, 4091278, 4100587, 4103131, 4105562, 4106518, 4107975, NA,      NA,      NA,      NA,      NA
+)
+
+# Set up Unemployment dataset:
+unemployment <- tribble(
+  ~Year, ~Jan,   ~Feb,   ~Mar,   ~Apr,   ~May,   ~Jun,   ~Jul,   ~Aug,   ~Sep,   ~Oct,   ~Nov,   ~Dec,   ~Avg,
+  2015, 263269, 259882, 255125, 248858, 241244, 232799, 224890, 219152, 216077, 215815, 217759, 219861, NA,
+  2016, 220624, 219936, 18292, 217000, 217515, 219905, 222773, 224552, 224343, 221221, 215117, 207915, NA,
+  2017, 201546, 196960, 194700, 194602, 195692, 196809, 197223, 196527, 194687, 192081, 189554, 186885, NA,
+  2018, 184345, 182194, 179987, 177386, 174507, 171861, 170229, 170543, 173328, 177697, 181782, 184335, NA,
+  2019, 184747, 182409, 178067, 172680, 167722, 164587, 163460, 163458, 163115, 163531, 166135, 171163, NA,
+  2020, 177869, 185978, 194396, 470809, 846892, 698793, 675299, 600055, 581618, 533486, 524073, 513505, NA,
+  2021, 500601, 487484, 469442, 458861, 430087, 437903, 409320, 396792, 361334, 346099, 330104, 331696, NA,
+  2022, 316084, 287012, 262951, 250658, 234513, 221957, 203656, 184397, 197737, 208190, 215225, 218926, NA,
+  2023, 220203, 219426, 216527, 212270, 208605, 206288, 205566, 206075, 206961, 207576, 207721, 207341, NA,
+  2024, 206642, 207142, 210298, 215718, 221855, 227666, 232827, 236650, 239103, 240414, 240152, 239755, NA,
+  2025, 237909, 226397, 218192, 214032, 207546, 203369, 205980, 210189, NA,     NA,     NA,     NA,     NA
+)
+```
 
 ## Preprocess data
+
 ```{r}
+# First group complaint dataset by year and find out number of complaints each year: 
+complaint_summary <- complaint_data %>%
+  mutate(
+    date = mdy(CMPLNT_FR_DT), 
+    year = year(date)
+  ) %>%
+  filter(year >= 1900) %>% 
+  rename(
+    NYC_district = BORO_NM
+  )
+
+# Clean felony-data datasets (2000-2024)
+df_seven <- df_seven %>% 
+  slice(3:min(11, n()))
+
+df_non_seven <- df_non_seven %>% 
+  slice(2:min(11, n()))
+
+df_misdemeanor <- df_misdemeanor %>% 
+  slice(2:min(11, n()))
+
+df_violation <- df_violation %>% 
+  slice(2:min(5, n()))
+
+# Group by year and borough, count number in each group
+by_year_borough <- evictions %>%
+  mutate(
+    exec_date = mdy(`Executed Date`),     
+    year = year(exec_date),
+    borough = toupper(BOROUGH)
+  ) %>% 
+  count(year, borough, name = "n") %>%
+  arrange(year, borough)
 ```
+
+
+
+
+
