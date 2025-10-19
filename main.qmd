@@ -1,0 +1,34 @@
+---
+title: "Crime Analysis"
+author: "Kristina Polonska, Mariana Konovalenko, Taras Baraniuk"
+date: 21/10/2025
+format: 
+    html: default
+    typst: default
+---
+
+
+## Import Libraries
+```{r}
+
+```
+
+
+## Read & Parse the data
+
+- /data/ParkingViolationCodes_March_2024.xlsx - https://data.cityofnewyork.us/City-Government/Open-Parking-and-Camera-Violations/nc67-uf89/about_data;
+- /data/non-seven-major-felony-offenses-2000-2024.xls - https://www.nyc.gov/site/nypd/stats/crime-statistics/historical.page;
+- /data/non-seven-major-felony-offenses-2000-2024.xls - https://www.nyc.gov/site/nypd/stats/crime-statistics/historical.page;
+- /data/misdemeanor-offenses-2000-2024.xls - https://www.nyc.gov/site/nypd/stats/crime-statistics/historical.page;
+- /data/violation-offenses-2000-2024.xls - https://www.nyc.gov/site/nypd/stats/crime-statistics/historical.page;
+- https://uk.wikipedia.org/wiki/%D0%97%D0%BB%D0%BE%D1%87%D0%B8%D0%BD%D0%BD%D1%96%D1%81%D1%82%D1%8C_%D0%B2_%D0%A3%D0%BA%D1%80%D0%B0%D1%97%D0%BD%D1%96;
+- https://visnyk-juris-uzhnu.com/wp-content/uploads/2025/07/46-3.pdf
+
+
+```{r}
+```
+
+
+## Preprocess data
+```{r}
+```
