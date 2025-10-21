@@ -123,7 +123,7 @@ by_year_borough <- evictions %>%
 ```
 
 ## Visualisations
-#general crime analysis by years
+# general crime analysis by years
 ```{r}
 #| code-fold: true
 #| code-summary: "show code :)"
