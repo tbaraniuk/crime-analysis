@@ -22,56 +22,46 @@ library(tidyr)
 library(plotly)
 library(scales)
 library(sf)
+library(janitor)
+library(stringr)
+library(lubridate)
+library(tidyr)
+library(patchwork)
 ```
 
 
-## Read & Preprocess the data
+## Read The data
 ```{r}
 #| message: false
 
 # Download complaint data
 complaint_data <- read_csv("data/NYPD_Complaint_Data_Historic_20251019.csv")
 
-complaint_data_full <- read_parquet("data/NYPD_Complaint_Data_Historic_20251021.parquet")
+complaint_data_full <- read_parquet("data/NYPD_Complaint_Data_Historic_20251021.parquet") |>
+  clean_names()
 
-# Download seven major felony data (2000-2024)
-df_seven <- read_excel(
-  "data/seven-major-felony-offenses-2000-2024.xls",
-  sheet = "Seven Major Felony Offenses"
-)
+evictions <- read_csv_arrow("data/Evictions_20251019.csv")
 
-# Download non-seven major felony data (2000-2024)
-df_non_seven <- read_excel(
-  "data/non-seven-major-felony-offenses-2000-2024.xls",
-  sheet = "Non-Seven Major Felony Offenses"
-)
+df_full_evictions <- read_csv_arrow("data/Evictions_20251021.csv") |>
+  clean_names()
+```
 
-# Download misdemeanor felony data (2000-2024)
-df_misdemeanor <- read_excel(
-  "data/misdemeanor-offenses-2000-2024.xls",
-  sheet = "Misdemeanor Offenses"
-)
 
-# Download violation offenses data (2000-2024)
-df_violation <- read_excel(
-  "data/violation-offenses-2000-2024.xls",
-  sheet = "Violation Offenses"
-)
-
-# Get evictions data
-evictions <- read_csv("data/Evictions_20251019.csv") 
-
+## Parse the data
+```{r}
 # Parse ukrainian crime rates data:
 url <- "https://uk.wikipedia.org/wiki/Злочинність_в_Україні"
-page   <- read_html(url)
-tabs   <- page %>% html_elements("table.wikitable")
+
+page <- read_html(url)
+tabs <- page %>% 
+  html_elements("table.wikitable")
 
 crime_ukr <- tabs[[1]] %>% 
   html_table(fill = TRUE)
 ```
 
-## Preprocess data
 
+## Preprocess data
 ```{r}
 # First group complaint dataset by year and find out number of complaints each year: 
 complaint_summary <- complaint_data %>%
@@ -84,19 +74,6 @@ complaint_summary <- complaint_data %>%
     NYC_district = BORO_NM
   )
 
-# Clean felony-data datasets (2000-2024)
-df_seven <- df_seven %>% 
-  slice(3:min(11, n()))
-
-df_non_seven <- df_non_seven %>% 
-  slice(2:min(11, n()))
-
-df_misdemeanor <- df_misdemeanor %>% 
-  slice(2:min(11, n()))
-
-df_violation <- df_violation %>% 
-  slice(2:min(5, n()))
-
 # Group by year and borough, count number in each group
 by_year_borough <- evictions %>%
   mutate(
@@ -105,7 +82,8 @@ by_year_borough <- evictions %>%
     borough = toupper(BOROUGH)
   ) %>% 
   count(year, borough, name = "n") %>%
-  arrange(year, borough)
+  arrange(year, borough) %>%
+  collect()
 
 # Clean and process ukrainian crime rates data (add extra 2 missing rows):
 crime_ukr <- crime_ukr %>%
@@ -124,17 +102,13 @@ crime_ukr <- add_row(crime_ukr, рік = 2025, total_crimes = 473662)
 
 ## Visualizations
 
-
-# Our problem
-
-Crime in Ukraine:
-
+### Crime in Ukraine
 ```{r}
 ggplot(crime_ukr, aes(x = рік, y = total_crimes / 1000)) +
   geom_line(color = "#00CDCD", size = 1.2) +        
   geom_point(color = "#FFB90F", size = 2.5) + 
   scale_x_continuous(breaks = crime_ukr$рік) +
-  labs(title = "Total number of crimes commited each year in Ukraine",
+  labs(title = "Total number of crimes committed each year in Ukraine",
        x = NULL,
        y = "Total crimes (in thousands)") +
   theme_minimal() +
@@ -143,6 +117,7 @@ ggplot(crime_ukr, aes(x = рік, y = total_crimes / 1000)) +
     panel.grid.minor.x = element_blank()
   )
 ```
+
 
 ### NYC crime complaints by years
 ```{r}
@@ -183,6 +158,173 @@ complaint_interactive <- ggplotly(complaint_vis, tooltip = 'text') |>
 
 complaint_interactive
 ```
+
+
+```{r}
+eviction_monthly <- df_full_evictions %>%
+  select(borough, executed_date) %>%
+  mutate(executed_date = as_date(executed_date, format = "%m/%d/%Y")) %>%
+  dplyr::filter(
+    executed_date >= "2016-01-01" & executed_date <= "2025-12-31",
+    !is.na(borough),
+    borough != "Citywide"
+  ) %>%
+  mutate(borough = str_to_title(borough)) %>%
+  mutate(
+    month_year = floor_date(executed_date, "month")
+  ) %>%
+  group_by(month_year) %>%
+  summarise(total_count = n()) %>%
+  collect() %>%
+  mutate(type = "Evictions")
+ 
+crime_monthly <- complaint_data_full %>%
+  select(boro_nm, cmplnt_fr_dt, law_cat_cd) %>%
+  mutate(cmplnt_fr_dt = as_date(cmplnt_fr_dt, format = "%m/%d/%Y")) %>%
+  dplyr::filter(
+    cmplnt_fr_dt >= "2016-01-01" & cmplnt_fr_dt <= "2025-12-31",
+    !is.na(boro_nm),
+    law_cat_cd == "FELONY"
+  ) %>%
+  mutate(borough = str_to_title(boro_nm)) %>%
+  mutate(
+    month_year = floor_date(cmplnt_fr_dt, "month")
+  ) %>%
+  group_by(month_year) %>%
+  summarise(total_count = n()) %>%
+  collect() %>%
+  mutate(type = "Felonies")
+
+bind_rows(eviction_monthly, crime_monthly) |>
+  ggplot(aes(x = month_year, y = total_count, color = type)) +
+    geom_line(linewidth = 1) +
+    facet_wrap(~ type, ncol = 1, scales = "free_y") +
+    scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+    scale_color_manual(values = c("Evictions" = "#1f78b4", "Felonies" = "#e31a1c")) +
+    labs(
+      title = paste("Total Monthly Evictions vs. Felonies in (2016-2025)"),
+      x = "Date",
+      y = "Total Count"
+    ) +
+    theme_minimal() +
+    theme(legend.position = "none")
+```
+```{r}
+target_borough <- "Bronx"
+
+eviction_monthly <- df_full_evictions %>%
+  select(borough, executed_date) %>%
+  mutate(executed_date = as_date(executed_date, format = "%m/%d/%Y")) %>%
+  dplyr::filter(
+    executed_date >= "2016-01-01" & executed_date <= "2025-12-31",
+    !is.na(borough),
+    borough != "Citywide"
+  ) %>%
+  mutate(borough = str_to_title(borough)) %>%
+  dplyr::filter(borough == target_borough) %>% 
+  mutate(
+    month_year = floor_date(executed_date, "month")
+  ) %>%
+  group_by(month_year) %>%
+  summarise(total_count = n()) %>%
+  collect() %>%
+  mutate(type = "Evictions")
+ 
+crime_monthly <- complaint_data_full %>%
+  select(boro_nm, cmplnt_fr_dt, law_cat_cd) %>%
+  mutate(cmplnt_fr_dt = as_date(cmplnt_fr_dt, format = "%m/%d/%Y")) %>%
+  dplyr::filter(
+    cmplnt_fr_dt >= "2016-01-01" & cmplnt_fr_dt <= "2025-12-31",
+    !is.na(boro_nm),
+    law_cat_cd == "FELONY"
+  ) %>%
+  mutate(borough = str_to_title(boro_nm)) %>%
+  dplyr::filter(borough == target_borough) %>%
+  mutate(
+    month_year = floor_date(cmplnt_fr_dt, "month")
+  ) %>%
+  group_by(month_year) %>%
+  summarise(total_count = n()) %>%
+  collect() %>%
+  mutate(type = "Felonies")
+
+bind_rows(eviction_monthly, crime_monthly) |>
+  ggplot(aes(x = month_year, y = total_count, color = type)) +
+    geom_line(linewidth = 1) +
+    facet_wrap(~ type, ncol = 1, scales = "free_y") +
+    scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+    scale_color_manual(values = c("Evictions" = "#1f78b4", "Felonies" = "#e31a1c")) +
+    labs(
+      title = paste("Monthly Evictions vs. Felonies in", target_borough, "(2019-2023)"),
+      x = "Date",
+      y = "Total Count"
+    ) +
+    theme_minimal() +
+    theme(legend.position = "none")
+```
+
+
+```{r}
+eviction_points <- df_full_evictions %>%
+  select(borough, latitude, longitude, executed_date) %>%
+  mutate(executed_date = as_date(executed_date, format = "%m/%d/%Y")) %>%
+  dplyr::filter(
+    year(executed_date) == 2019,
+    !is.na(latitude), !is.na(longitude)
+  ) %>%
+  mutate(
+    latitude = as.numeric(latitude),
+    longitude = as.numeric(longitude)
+  ) %>%
+  dplyr::filter(
+    latitude > 40.4 & latitude < 40.9,
+    longitude > -74.3 & longitude < -73.6
+  ) %>%
+  collect()
+
+crime_points <- complaint_data_full %>%
+  select(c(boro_nm, latitude, longitude, cmplnt_fr_dt, law_cat_cd)) %>%
+  mutate(
+    cmplnt_fr_dt = as_date(cmplnt_fr_dt, format = "%m/%d/%Y"),
+    latitude = as.numeric(latitude),
+    longitude = as.numeric(longitude)
+  ) %>%
+  dplyr::filter(
+    year(cmplnt_fr_dt) == 2019,
+    law_cat_cd == "FELONY",
+    !is.na(latitude), !is.na(longitude)
+  ) %>%
+  dplyr::filter(
+    latitude > 40.4 & latitude < 40.9,
+    longitude > -74.3 & longitude < -73.6
+  ) %>%
+  collect()
+
+plot_evictions <- ggplot() +
+  stat_density_2d(
+    data = eviction_points,
+    aes(x = longitude, y = latitude, fill = ..level..),
+    geom = "polygon"
+  ) +
+  scale_fill_viridis_c(option = "magma") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(title = "Eviction Hotspots (2017-2019)")
+
+plot_felonies <- ggplot() +
+  stat_density_2d(
+    data = crime_points,
+    aes(x = longitude, y = latitude, fill = ..level..),
+    geom = "polygon"
+  ) +
+  scale_fill_viridis_c(option = "magma") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(title = "Felony Hotspots for 2019")
+
+plot_evictions + plot_felonies
+```
+
 
 ### NYC Crime Complaints by Borough 
 ```{r}
