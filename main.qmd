@@ -27,6 +27,7 @@ library(stringr)
 library(lubridate)
 library(tidyr)
 library(patchwork)
+library(purrr)
 ```
 
 
@@ -36,11 +37,13 @@ library(patchwork)
 
 # Download complaint data
 complaint_data <- read_csv("data/NYPD_Complaint_Data_Historic_20251019.csv")
+complaint_data2 <- read_parquet('data/NYPD_Complaint_Data_Historic_20251021.parquet')
 
 complaint_data_full <- read_parquet("data/NYPD_Complaint_Data_Historic_20251021.parquet") |>
   clean_names()
 
 evictions <- read_csv_arrow("data/Evictions_20251019.csv")
+evictions2 <- read_csv('data/Evictions_20251021.csv')
 
 df_full_evictions <- read_csv_arrow("data/Evictions_20251021.csv") |>
   clean_names()
@@ -124,7 +127,7 @@ ggplot(crime_ukr, aes(x = рік, y = total_crimes / 1000)) +
 #| code-fold: true
 #| code-summary: "show code"
 
-crime_year <- complaint_summary |>
+crime_year <- complaint_summary2 |>
   filter(!is.na(year), year >= 2000, year <= 2025) |>
   count(year, name = 'complaints') |>
   arrange(year)
@@ -159,12 +162,11 @@ complaint_interactive <- ggplotly(complaint_vis, tooltip = 'text') |>
 complaint_interactive
 ```
 
-
 ```{r}
 eviction_monthly <- df_full_evictions %>%
   select(borough, executed_date) %>%
   mutate(executed_date = as_date(executed_date, format = "%m/%d/%Y")) %>%
-  dplyr::filter(
+  filter(
     executed_date >= "2016-01-01" & executed_date <= "2025-12-31",
     !is.na(borough),
     borough != "Citywide"
@@ -325,60 +327,83 @@ plot_felonies <- ggplot() +
 plot_evictions + plot_felonies
 ```
 
-
-### NYC Crime Complaints by Borough 
+### how does crime complaints depend on evictions?
 ```{r}
 #| code-fold: true
 #| code-summary: "show code"
-# options(tigris_class = "sf", tigris_use_cache = TRUE)
+crime_by_year_borough <- complaint_data2 |>
+  mutate(
+    date = mdy(CMPLNT_FR_DT),
+    year = year(date),
+    borough = toupper(BORO_NM)
+  ) |>
+  filter(!is.na(year), year >= 2000, year <= 2025) |>
+  group_by(year, borough) |>
+  summarise(complaints = n(), .groups = "drop") |>
+  mutate(year = as.integer(year)) |>
+  complete(
+    year = 2000:2025,
+    borough = c("MANHATTAN","BROOKLYN","QUEENS","BRONX","STATEN ISLAND"),
+    fill = list(complaints = 0)
+  )
 
-# crime_by_year_borough <- complaint_data %>%
-#   mutate(
-#     date = mdy(CMPLNT_FR_DT),
-#     year = year(date),
-#     borough = toupper(BORO_NM)
-#   ) %>%
-#   filter(!is.na(year), year >= 2000, year <= 2025) %>%
-#   group_by(year, borough) %>%
-#   summarise(complaints = sum(count, na.rm = TRUE), .groups = "drop") %>%
-#   mutate(year = as.integer(year))
+ev_by_year_boro <- evictions2 |>
+  mutate(
+    exec_date = mdy(`Executed Date`),
+    year      = year(exec_date),
+    borough   = toupper(BOROUGH)
+  ) |>
+  count(year, borough, name = "evict")
 
-# crime_by_year_borough <- crime_by_year_borough %>%
-#   complete(
-#     year = 2000:2025,
-#     borough = c("MANHATTAN","BROOKLYN","QUEENS","BRONX","STATEN ISLAND"),
-#     fill = list(complaints = 0)
-#   )
+bi <- crime_by_year_borough |>
+  left_join(ev_by_year_boro, by = c("year","borough")) |>
+  mutate(evict = replace_na(evict, 0)) |>
+  group_by(year) |>
+  mutate(
+    c_q = ntile(complaints, 3),
+    e_q = ntile(evict, 3), 
+    bi_key = paste(c_q, e_q, sep = "-")
+  ) |>
+  ungroup()
 
-# nyc_boroughs <- counties(state = "NY", year = 2023) %>%
-#   filter(NAME %in% c("New York","Kings","Queens","Bronx","Richmond")) %>%
-#   mutate(
-#     borough = case_when(
-#       NAME == "New York" ~ "MANHATTAN",
-#       NAME == "Kings"    ~ "BROOKLYN",
-#       NAME == "Queens"   ~ "QUEENS",
-#       NAME == "Bronx"    ~ "BRONX",
-#       NAME == "Richmond" ~ "STATEN ISLAND"
-#     )
-#   )
+nyc_boroughs <- st_read("nybb.shp")
 
-# crime_map <- left_join(nyc_boroughs, crime_by_year_borough, by = "borough")
-# max_value <- max(crime_by_year_borough$complaints, na.rm = TRUE)
+nyc_boroughs <- nyc_boroughs |>
+  mutate(borough = toupper(BoroName)) |>
+  select(borough, geometry)
 
-# p <- ggplot(crime_map, aes(group = borough)) +
-#   geom_sf(aes(fill = complaints), color = "white", linewidth = 0.4) +
-#   scale_fill_gradient(
-#     low = "#C7E9B4", high = "#081D58", 
-#     limits = c(0, max_value), na.value = "grey90"
-#   ) +
-#   labs(
-#     title = "NYC Crime Complaints by Borough",
-#     subtitle = "Year: {closest_state}",
-#     fill = "Complaints"
-#   ) +
-#   theme_minimal(base_size = 13) +
-#   transition_states(year, transition_length = 2, state_length = 1) +
-#   ease_aes("linear")
+map_bi <- nyc_boroughs |> left_join(bi, by = "borough") |>
+  mutate(id = row_number())
+bi_pal <- c(
+  "1-1"="#e8e8e8","2-1"="#b8d6be","3-1"="#73ae80",
+  "1-2"="#bed8ec","2-2"="#90b2b3","3-2"="#5a9178",
+  "1-3"="#64acbe","2-3"="#4a7c8c","3-3"="#3b5d70"
+)
 
-# animate(p, nframes = 25, fps = 5, width = 800, height = 600, renderer = gifski_renderer())
+nyc_boroughs_static <- map_bi |>
+  group_by(borough) |>
+  slice(1) |>
+  ungroup() |>
+  select(borough, geometry)
+
+p_bi_static <- ggplot(map_bi) +
+  geom_sf(data = nyc_boroughs_static, fill = NA, color = "black", linewidth = 0.5, inherit.aes = FALSE) + 
+  geom_sf(aes(fill = bi_key, frame = year, ids = id, text = paste0("Район: ", borough,
+                  "\nСкарги: ", complaints,
+                  "\nВиселення: ", evictions2,
+                  "\nРік: ", year)), color = NA, linewidth = 0.3) +
+  scale_fill_manual(values = bi_pal, na.value = "grey80", name = "complaints × evictions") +
+  labs(
+    title = "how does crime complaints depend on evictions",
+  ) +
+  theme_void() +
+  theme(
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5, margin = margin(t = 5, b = 5)),
+    legend.position = "right",
+    plot.background = element_rect(fill = "white", color = NA)
+  )
+
+p_bi_interactive <- ggplotly(p_bi_static, tooltip = "text")
+
+p_bi_interactive
 ```
