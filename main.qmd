@@ -105,9 +105,43 @@ by_year_borough <- evictions %>%
   ) %>% 
   count(year, borough, name = "n") %>%
   arrange(year, borough)
+
+# Clean and process ukrainian crime rates data (add extra 2 missing rows):
+crime_ukr <- crime_ukr %>%
+  filter(!is.na(рік), рік >= 2010) %>%
+  mutate(
+    total_crimes = str_replace_all(`всього злочинів`, "\\D", ""),
+    total_crimes = na_if(total_crimes, ""),   # keep blanks as NA
+    total_crimes = as.integer(total_crimes)
+  ) %>%
+  select(рік, total_crimes)
+
+crime_ukr <- add_row(crime_ukr, рік = 2024, total_crimes = 382335)
+crime_ukr <- add_row(crime_ukr, рік = 2025, total_crimes = 473662)
 ```
 
+
 ## Visualizations
+
+
+# Our problem
+
+Crime in Ukraine:
+
+```{r}
+ggplot(crime_ukr, aes(x = рік, y = total_crimes / 1000)) +
+  geom_line(color = "#00CDCD", size = 1.2) +        
+  geom_point(color = "#FFB90F", size = 2.5) + 
+  scale_x_continuous(breaks = crime_ukr$рік) +
+  labs(title = "Total number of crimes commited each year in Ukraine",
+       x = NULL,
+       y = "Total crimes (in thousands)") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    panel.grid.minor.x = element_blank()
+  )
+```
 
 ### NYC crime complaints by years
 ```{r}
