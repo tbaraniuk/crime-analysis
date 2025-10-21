@@ -128,12 +128,15 @@ by_year_borough <- evictions %>%
 #| code-fold: true
 #| code-summary: "show code :)"
 crime_year <- complaint_summary |>
-  filter(!is.na(year)) |>
+  filter(!is.na(year), year >= 2000, year <= 2025) |>
   count(year, name = 'complaints') |>
   arrange(year)
 
-complaint_vis <- ggplot(crime_year, aes(x = year, y = complaints)) +
-  geom_line(color = '#2F539B', linewidth = 1.3) +
+complaint_vis <- ggplot(crime_year, aes(x = year, y = complaints, group = 1, text = paste0(
+  'year: ', year,
+  '\ncomplaints: ', comma(complaints)
+))) +
+  geom_line(color = '#2F539B', linewidth = 1) +
   scale_y_continuous(labels = comma) + 
   scale_x_continuous(breaks = pretty_breaks(n = 5)) +
   labs(
@@ -148,7 +151,14 @@ complaint_vis <- ggplot(crime_year, aes(x = year, y = complaints)) +
     panel.grid.minor = element_blank(),
     text = element_text(face = 'italic')
   )
-complaint_vis
+
+complaint_interactive <- ggplotly(complaint_vis, tooltip = 'text') |>
+  layout(
+    hovermode = 'x unified',
+    yaxis = list(tickformat = ',d')
+  )
+
+complaint_interactive
 ```
 
 
