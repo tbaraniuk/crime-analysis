@@ -47,3 +47,5 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+NYPD_Complaint_Data_Historic_20251021.parquet

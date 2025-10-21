@@ -12,6 +12,7 @@ format:
 #| message: false
 #| warning: false
 
+library(arrow)
 library(readr)
 library(tidyverse)
 library(lubridate)
@@ -28,7 +29,9 @@ library(scales)
 #| message: false
 
 # Download complaint data
-complaint_data <- read_csv("data/NYPD_Complaint_Data_Historic_20251019 (1).csv")
+complaint_data <- read_csv("data/NYPD_Complaint_Data_Historic_20251019.csv")
+
+complaint_data_full <- read_parquet("data/NYPD_Complaint_Data_Historic_20251021.parquet")
 
 # Download seven major felony data (2000-2024)
 df_seven <- read_excel(
