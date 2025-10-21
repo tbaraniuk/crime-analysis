@@ -16,6 +16,7 @@ library(lubridate)
 library(readxl)
 library(rvest)
 library(tidyr)
+library(ggplot2)
 ```
 
 ## Read & Parse the data
