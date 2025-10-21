@@ -59,6 +59,14 @@ df_violation <- read_excel(
 
 # Get evictions data
 evictions <- read_csv("data/Evictions_20251019.csv") 
+
+# Parse ukrainian crime rates data:
+url <- "https://uk.wikipedia.org/wiki/Злочинність_в_Україні"
+page   <- read_html(url)
+tabs   <- page %>% html_elements("table.wikitable")
+
+crime_ukr <- tabs[[1]] %>% 
+  html_table(fill = TRUE)
 ```
 
 ## Preprocess data
