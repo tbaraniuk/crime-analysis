@@ -141,4 +141,59 @@ complaint_interactive <- ggplotly(complaint_vis, tooltip = 'text') |>
 complaint_interactive
 ```
 
+### NYC Crime Complaints by Borough 
+```{r}
+#| code-fold: true
+#| code-summary: "show code"
+options(tigris_class = "sf", tigris_use_cache = TRUE)
 
+crime_by_year_borough <- complaint_data %>%
+  mutate(
+    date = mdy(CMPLNT_FR_DT),
+    year = year(date),
+    borough = toupper(BORO_NM)
+  ) %>%
+  filter(!is.na(year), year >= 2000, year <= 2025) %>%
+  group_by(year, borough) %>%
+  summarise(complaints = sum(count, na.rm = TRUE), .groups = "drop") %>%
+  mutate(year = as.integer(year))
+
+crime_by_year_borough <- crime_by_year_borough %>%
+  complete(
+    year = 2000:2025,
+    borough = c("MANHATTAN","BROOKLYN","QUEENS","BRONX","STATEN ISLAND"),
+    fill = list(complaints = 0)
+  )
+
+nyc_boroughs <- counties(state = "NY", year = 2023) %>%
+  filter(NAME %in% c("New York","Kings","Queens","Bronx","Richmond")) %>%
+  mutate(
+    borough = case_when(
+      NAME == "New York" ~ "MANHATTAN",
+      NAME == "Kings"    ~ "BROOKLYN",
+      NAME == "Queens"   ~ "QUEENS",
+      NAME == "Bronx"    ~ "BRONX",
+      NAME == "Richmond" ~ "STATEN ISLAND"
+    )
+  )
+
+crime_map <- left_join(nyc_boroughs, crime_by_year_borough, by = "borough")
+max_value <- max(crime_by_year_borough$complaints, na.rm = TRUE)
+
+p <- ggplot(crime_map, aes(group = borough)) +
+  geom_sf(aes(fill = complaints), color = "white", linewidth = 0.4) +
+  scale_fill_gradient(
+    low = "#C7E9B4", high = "#081D58", 
+    limits = c(0, max_value), na.value = "grey90"
+  ) +
+  labs(
+    title = "NYC Crime Complaints by Borough",
+    subtitle = "Year: {closest_state}",
+    fill = "Complaints"
+  ) +
+  theme_minimal(base_size = 13) +
+  transition_states(year, transition_length = 2, state_length = 1) +
+  ease_aes("linear")
+
+animate(p, nframes = 25, fps = 5, width = 800, height = 600, renderer = gifski_renderer())
+```
