@@ -117,20 +117,18 @@ The goal of our research is to suggest how government should remedy *rising crim
 #| code-summary: "show code"
 
 ggplot(crime_ukr, aes(x = рік, y = total_crimes / 1000)) +
-ggplot(crime_ukr, aes(x = рік, y = total_crimes / 1000)) +
   geom_line(color = "#A2B5CD", size = 1) +        
   geom_point(color = "#A2B5CD", size = 2) + 
   geom_text(
     aes(label = paste0(round(total_crimes / 1000, 0), "k")),
     vjust = -1.3,                     
     size = 3,                                   
-    color = "black",
-    fontface = "bold"
+    color = "black"
   ) +
   scale_x_continuous(breaks = crime_ukr$рік) +
   labs(title = "Number of crimes commited each year in Ukraine (in thousands)",
        x = NULL,
-       y = NULL)+
+       y = NULL) +
   theme_minimal() +
   theme(
     plot.title = element_text(hjust = 0.5),
@@ -141,6 +139,7 @@ ggplot(crime_ukr, aes(x = рік, y = total_crimes / 1000)) +
     panel.grid.minor = element_blank(),
     plot.margin = margin(10, 20, 20, 20)
   )
+
 ```
 
 
