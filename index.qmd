@@ -108,7 +108,7 @@ crime_ukr <- add_row(crime_ukr, рік = 2025, total_crimes = 473662)
 
 ### The Problem
 
-The goal of our research is to suggest how government should remedy *rising* crime rates in Ukraine. To do this, we will take a look what New York City's crime records. Visualizations will show how different factors affect crime rates and by analyzing them we will suggest what changes should be done in Ukraine.
+The goal of our research is to suggest how government should remedy *rising crime rates in Ukraine*. We figured that *evictions highly affect crime rates*. We will take a look at what government of *New York City* has done in this area and how that helped lower number of crimes. Visualizations will help us see the patterns more clearly and confidently say which action helped.
 
 ### Rising Crime Rates In Ukraine
 
