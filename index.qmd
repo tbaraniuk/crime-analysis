@@ -106,27 +106,46 @@ crime_ukr <- add_row(crime_ukr, рік = 2025, total_crimes = 473662)
 
 ## Visualizations
 
-### Crime in Ukraine
+### The Problem
+
+The goal of our research is to suggest how government should remedy *rising* crime rates in Ukraine. To do this, we will take a look what New York City's crime records. Visualizations will show how different factors affect crime rates and by analyzing them we will suggest what changes should be done in Ukraine.
+
+### Rising Crime Rates In Ukraine
+
 ```{r}
 #| code-fold: true
 #| code-summary: "show code"
 
 ggplot(crime_ukr, aes(x = рік, y = total_crimes / 1000)) +
-  geom_line(color = "#00CDCD", size = 1.2) +        
-  geom_point(color = "#FFB90F", size = 2.5) + 
+ggplot(crime_ukr, aes(x = рік, y = total_crimes / 1000)) +
+  geom_line(color = "#A2B5CD", size = 1) +        
+  geom_point(color = "#A2B5CD", size = 2) + 
+  geom_text(
+    aes(label = paste0(round(total_crimes / 1000, 0), "k")),
+    vjust = -1.3,                     
+    size = 3,                                   
+    color = "black",
+    fontface = "bold"
+  ) +
   scale_x_continuous(breaks = crime_ukr$рік) +
-  labs(title = "Total number of crimes committed each year in Ukraine",
+  labs(title = "Number of crimes commited each year in Ukraine (in thousands)",
        x = NULL,
-       y = "Total crimes (in thousands)") +
+       y = NULL)+
   theme_minimal() +
   theme(
-    plot.title = element_text(face = "bold", hjust = 0.5),
-    panel.grid.minor.x = element_blank()
+    plot.title = element_text(hjust = 0.5),
+    panel.grid.minor.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.margin = margin(10, 20, 20, 20)
   )
 ```
 
 
 ### NYC Crime Complaints by Years
+
 ```{r}
 #| code-fold: true
 #| code-summary: "show code"
