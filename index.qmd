@@ -39,16 +39,19 @@ pacman::p_load(
 complaint_data <- read_csv("data/NYPD_Complaint_Data_Historic_20251019.csv")
 
 complaint_data_full <- read_parquet("data/NYPD_Complaint_Data_Historic_20251021.parquet") |>
-  clean_names()
+  clean_names() |>
+  mutate(
+    complaint_datetime = lubridate::mdy_hms(
+      paste(cmplnt_fr_dt, cmplnt_fr_tm), 
+      tz = "America/New_York", 
+      quiet = TRUE
+    )
+  )
 
 evictions <- read_csv_arrow("data/Evictions_20251019.csv")
 
 df_full_evictions <- read_csv_arrow("data/Evictions_20251021.csv") |>
   clean_names()
-```
-
-```{r}
-
 ```
 
 
@@ -127,6 +130,7 @@ ggplot(crime_ukr, aes(x = year, y = total_crimes / 1000)) +
     color = "black"
   ) +
   scale_x_continuous(breaks = crime_ukr$year) +
+  scale_fill_brewer(palette = "Set2") +
   labs(title = "Number of crimes commited each year in Ukraine (in thousands)",
        x = NULL,
        y = NULL) +
@@ -159,6 +163,7 @@ complaint_vis <- complaint_summary |>
   geom_line(color = '#2F539B', linewidth = 1) +
   scale_y_continuous(labels = comma) + 
   scale_x_continuous(breaks = pretty_breaks(n = 5)) +
+  scale_fill_brewer(palette = "Set2") +
   labs(
     title = 'NYC crime complaints by year',
     x = 'year', y = 'number of complaints'
@@ -176,6 +181,149 @@ complaint_vis <- complaint_summary |>
 complaint_interactive <- ggplotly(complaint_vis, tooltip = 'text')
 
 complaint_interactive
+```
+
+
+### NYC Crime Complaints Peak Hours, Weekdays and Days in 2024
+```{r}
+#| code-fold: true
+#| code-summary: "show code"
+
+complaint_data_full |>
+  dplyr::filter(!is.na(complaint_datetime) & year(complaint_datetime) == 2024) |>
+  mutate(
+    hour_of_day = lubridate::hour(complaint_datetime),
+  ) |>
+  collect() |>
+  ggplot(aes(x = hour_of_day)) +
+    geom_bar(fill = "#2F539B") +
+    scale_fill_brewer(palette = "Set2") +
+    labs(
+      title = "Peak Hours in 2024",
+      x = "Hour of Day (0-23)",
+      y = "Total Complaints Count"
+    ) +
+    theme_minimal() +
+    facet_wrap(~ law_cat_cd, scales = "free_y")
+```
+
+```{r}
+#| code-fold: true
+#| code-summary: "show code"
+#| fig-width: 14
+#| fig-height: 9
+
+complaint_data_full |>
+  dplyr::filter(!is.na(complaint_datetime) & complaint_datetime >= "2024-01-01" & complaint_datetime <= "2024-12-31") |>
+  mutate(
+    day_of_year = lubridate::yday(complaint_datetime)
+  ) |>
+  collect() |>
+  ggplot(aes(x = day_of_year)) + 
+    geom_histogram(binwidth = 7, fill = "#2F539B", boundary = 1) + 
+    scale_fill_brewer(palette = "Set2") +
+    labs(
+      title = "Complaints Week Trend in 2024 (Binned by Week)",
+      x = "Day of Year (1-366, grouped into weekly bins)",
+      y = "Total Complaints Count"
+    ) +
+    theme_minimal() +
+    facet_wrap(~ law_cat_cd, scales = "free_y", nrow = 3)
+```
+
+
+### TOP 10 Offenses for each Level
+```{r}
+#| code-fold: true
+#| code-summary: "show code"
+
+complaint_data_full |>
+  dplyr::filter(
+    !is.na(complaint_datetime) & 
+    lubridate::year(complaint_datetime) == 2024 &
+    !is.na(law_cat_cd) & !is.na(ofns_desc)
+  ) |>
+    count(law_cat_cd, ofns_desc, sort = TRUE) |>
+  group_by(law_cat_cd) |>
+  slice_max(order_by = n, n = 10) |>
+  ungroup() |>
+  mutate(
+    law_cat_cd = forcats::fct_reorder(law_cat_cd, n, .fun = sum, .desc = TRUE),
+    ofns_desc = stringr::str_to_title(ofns_desc)
+  ) |>
+  collect() |>
+  ggplot(aes(x = n, y = forcats::fct_reorder(ofns_desc, n), fill = law_cat_cd)) +
+    geom_col(show.legend = FALSE) +
+    scale_fill_brewer(palette = "Set2") +
+    labs(
+      title = "Top 10 Offenses by Level in 2024",
+      x = "Total Complaint Count",
+      y = "Offense Description"
+    ) +
+    theme_minimal() +
+    facet_wrap(~ law_cat_cd, scales = "free_y", nrow = 3)
+```
+
+
+### Relation of Suspect's Age Group and Offense Level in 2024 and 2025
+```{r}
+#| code-fold: true
+#| code-summary: "show code"
+#| fig-width: 14
+#| fig-height: 7
+
+age_levels <- c("<18", "18-24", "25-44", "45-64", "65+")
+
+complaint_data_full |>
+  dplyr::filter(
+    !is.na(complaint_datetime) &
+    lubridate::year(complaint_datetime) >= 2024 &
+    !is.na(law_cat_cd) &
+    susp_age_group %in% age_levels
+  ) |>
+  mutate(
+    susp_age_group = factor(susp_age_group, levels = age_levels)
+  ) |>
+  collect() |>
+  ggplot(aes(x = susp_age_group, fill = law_cat_cd)) +
+    geom_bar(position = "dodge") +
+    scale_fill_brewer(palette = "Set2") +
+    labs(
+      title = "Complaint Counts by Suspect Age Group and Offense Level (2024 and 2025)",
+      x = "Suspect's Age Group",
+      y = "Total Complaint Count",
+      fill = "Offense Level"
+    ) +
+    theme_minimal()
+```
+
+
+### Relation of Suspect's Sex and Offense Level
+```{r}
+#| code-fold: true
+#| code-summary: "show code"
+#| fig-width: 14
+#| fig-height: 7
+
+complaint_data_full |>
+  dplyr::filter(
+    !is.na(complaint_datetime) & 
+    lubridate::year(complaint_datetime) == 2024 &
+    !is.na(law_cat_cd) &
+    susp_sex %in% c("M", "F", "U") 
+  ) |>
+  collect() |>
+    ggplot(aes(x = law_cat_cd, fill = susp_sex)) +
+    geom_bar(position = "fill") +
+      scale_fill_brewer(palette = "Set2") +
+      scale_y_continuous(labels = scales::percent_format()) +
+      labs(
+        title = "Proportion of Suspect Sex by Offense Level (2024)",
+        x = "Offense Level",
+        y = "Percentage",
+        fill = "Suspect Sex"
+      ) +
+      theme_minimal()
 ```
 
 
@@ -257,7 +405,7 @@ bind_rows(eviction_monthly, crime_monthly, misdemeanor_monthly, violation_monthl
     geom_line(linewidth = 1) +
     facet_wrap(~ type, ncol = 1, scales = "free_y") +
     scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
-    scale_color_manual(values = c("Evictions" = "#1f78b4", "Felonies" = "#e31a1c")) +
+    scale_fill_brewer(palette = "Set2") +
     labs(
       title = paste("Total Monthly Evictions vs. Felonies in (2016-2025)"),
       x = "Date",
@@ -273,9 +421,11 @@ bind_rows(eviction_monthly, crime_monthly, misdemeanor_monthly, violation_monthl
 #| warning: false
 #| code-fold: true
 #| code-summary: "show code"
+#| fig-width: 16
+#| fig-height: 16
 
 YEAR_START <- 2017
-YEAR_END <- 2025
+YEAR_END <- 2024
 
 eviction_points_anim <- df_full_evictions |>
   select(borough, latitude, longitude, executed_date) |>
@@ -297,7 +447,7 @@ eviction_points_anim <- df_full_evictions |>
   ) |>
   collect()
 
-crime_points_anim <- complaint_data_full |>
+base_crime_points_anim <- complaint_data_full |>
   select(c(boro_nm, latitude, longitude, cmplnt_fr_dt, law_cat_cd)) |>
   mutate(
     cmplnt_fr_dt = as_date(cmplnt_fr_dt, format = "%m/%d/%Y"),
@@ -307,7 +457,7 @@ crime_points_anim <- complaint_data_full |>
   ) |>
   dplyr::filter(
     year >= YEAR_START & year <= YEAR_END,
-    law_cat_cd == "FELONY",
+    law_cat_cd %in% c("FELONY", "MISDEMEANOR", "VIOLATION"),
     !is.na(latitude), !is.na(longitude)
   ) |>
   dplyr::filter(
@@ -328,7 +478,27 @@ plot_evictions <- ggplot() +
 
 plot_felonies <- ggplot() +
   stat_density_2d(
-    data = crime_points_anim,
+    data = dplyr::filter(base_crime_points_anim, law_cat_cd == "FELONY"),
+    aes(x = longitude, y = latitude, fill = ..level.., frame = year),
+    geom = "polygon"
+  ) +
+  scale_fill_viridis_c(option = "magma") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+plot_misdemeanors <- ggplot() +
+  stat_density_2d(
+    data = dplyr::filter(base_crime_points_anim, law_cat_cd == "MISDEMEANOR"),
+    aes(x = longitude, y = latitude, fill = ..level.., frame = year),
+    geom = "polygon"
+  ) +
+  scale_fill_viridis_c(option = "magma") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+plot_violations <- ggplot() +
+  stat_density_2d(
+    data = dplyr::filter(base_crime_points_anim, law_cat_cd == "VIOLATION"),
     aes(x = longitude, y = latitude, fill = ..level.., frame = year),
     geom = "polygon"
   ) +
@@ -338,96 +508,51 @@ plot_felonies <- ggplot() +
 
 fig <- plotly::subplot(
   ggplotly(plot_evictions),
-  ggplotly(plot_felonies), 
-  nrows = 1
+  ggplotly(plot_felonies),
+  ggplotly(plot_misdemeanors),
+  ggplotly(plot_violations),
+  nrows = 2,
+  shareX = TRUE,
+  shareY = TRUE
 ) |>
-  layout(title = "Eviction vs Felony Hotspots over Years")
+  layout(
+    title = "Eviction & Crime Hotspots over Years (2017-2024)",
+    annotations = list(
+      list(
+        x = 0.22, y = 0.1,
+        text = "Evictions",
+        showarrow = FALSE,
+        xref = 'paper', yref = 'paper',
+        xanchor = 'center', yanchor = 'bottom'
+      ),
+      list(
+        x = 0.78, y = 0.1,
+        text = "Felonies",
+        showarrow = FALSE,
+        xref = 'paper', yref = 'paper',
+        xanchor = 'center', yanchor = 'bottom'
+      ),
+      list(
+        x = 0.22, y = 0.45,
+        text = "Misdemeanors",
+        showarrow = FALSE,
+        xref = 'paper', yref = 'paper',
+        xanchor = 'center', yanchor = 'bottom'
+      ),
+      list(
+        x = 0.78, y = 0.45,
+        text = "Violations",
+        showarrow = FALSE,
+        xref = 'paper', yref = 'paper',
+        xanchor = 'center', yanchor = 'bottom'
+      )
+    )
+  )
 
 fig
 ```
 
-```{r}
-#| warning: false
-#| code-fold: true
-#| code-summary: "show code"
-
-YEAR_START <- 2017
-YEAR_END <- 2025
-
-eviction_points_anim <- df_full_evictions |>
-  select(borough, latitude, longitude, executed_date) |>
-  mutate(
-    executed_date = as_date(executed_date, format = "%m/%d/%Y"),
-    year = year(executed_date)
-  ) |>
-  dplyr::filter(
-    year >= YEAR_START & year <= YEAR_END, 
-    !is.na(latitude), !is.na(longitude)
-  ) |>
-  mutate(
-    latitude = as.numeric(latitude),
-    longitude = as.numeric(longitude)
-  ) |>
-  dplyr::filter(
-    latitude > 40.4 & latitude < 40.9,
-    longitude > -74.3 & longitude < -73.6
-  ) |>
-  collect()
-
-violations_points <- complaint_data_full |>
-  select(c(boro_nm, latitude, longitude, cmplnt_fr_dt, law_cat_cd)) |>
-  mutate(
-    cmplnt_fr_dt = as_date(cmplnt_fr_dt, format = "%m/%d/%Y"),
-    year = year(cmplnt_fr_dt),
-    latitude = as.numeric(latitude),
-    longitude = as.numeric(longitude)
-  ) |>
-  dplyr::filter(
-    year >= YEAR_START & year <= YEAR_END,
-    law_cat_cd == "VIOLATION",
-    !is.na(latitude), !is.na(longitude)
-  ) |>
-  dplyr::filter(
-    latitude > 40.4 & latitude < 40.9,
-    longitude > -74.3 & longitude < -73.6
-  ) |>
-  collect()
-
-plot_evictions <- ggplot() +
-  stat_density_2d(
-    data = eviction_points_anim,
-    aes(x = longitude, y = latitude, fill = ..level..),
-    geom = "polygon"
-  ) +
-  scale_fill_viridis_c(option = "magma") +
-  theme_minimal() +
-  theme(legend.position = "none")
-
-plot_violations <- ggplot() +
-  stat_density_2d(
-    data = violations_points,
-    aes(x = longitude, y = latitude, fill = ..level..),
-    geom = "polygon"
-  ) +
-  scale_fill_viridis_c(option = "magma") +
-  theme_minimal() +
-  theme(legend.position = "none")
-
-fig <- plotly::subplot(
-  ggplotly(plot_evictions),
-  ggplotly(plot_violations), 
-  nrows = 1
-)
-
-fig
-```
-
-
-### What can we do to improve situation?
-
-Lets look at the *how eviction rate changed* from 2017 to 2025 in each borough and *what changed* it.
-
-```{r}
+<!-- ```{r}
 #| code-fold: true
 #| code-summary: "show code"
 #| warning: false
@@ -456,4 +581,4 @@ ggplot(by_year_borough, aes(x = year, y = n, color = borough, group = borough)) 
     plot.margin = margin(10, 20, 10, 10),   
     clip = "off"  
   )
-```
+``` -->
